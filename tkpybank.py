@@ -536,7 +536,7 @@ def gui_maak_nieuwe_rekening():  # IO ()
 
     def test_input():
         if num.get().isdigit() and naam.get() != "" and rood.get().isdigit():
-            nieuwe_rekening(int(num.get()), naam.get(), typevar.get(), 0 - rood.get())
+            nieuwe_rekening(int(num.get()), naam.get(), typevar.get(), 0 - int(rood.get()))
             nieuw_window.destroy()
         else:
             if not num.get().isdigit():
