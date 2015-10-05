@@ -3,6 +3,9 @@ __author__ = 'peikos'
 import csv
 import random
 import logging
+from tkinter import *
+from tkinter.messagebox import showinfo
+from tkinter.simpledialog import askinteger
 
 # Debug-berichten worden niet geprint, maar in plaats daarvan via logging.debug() getoond.
 # Je hoeft dit niet te begrijpen, een ook niet de %s syntax die gebruikt wordt hiervoor.
@@ -10,7 +13,41 @@ import logging
 # kunt verwijderen om meer (debug) prints te zien. Aanroepen naar logging.debug kan je
 # als optionele prints beschouwen.
 
-# logging.basicConfig(level=logging.DEBUG)  # Ontcommenteer deze regel om alle debug-prints te zien.
+logging.basicConfig(level=logging.DEBUG)  # Ontcommenteer deze regel om alle debug-prints te zien.
+INTERFACE = "gui"  # globale constante
+
+
+class PinDialog():
+    def __init__(self, rekeningnr):
+        self.pinput = Tk()
+        self.pinput.title("Pincode voor " + str(rekeningnr))
+        self.pinvar = StringVar(self.pinput)
+        self.pincode = ""
+        self.display = Label(self.pinput, font="-size 32")
+        self.display.grid(row=0, column=0, columnspan=3)
+        self.buttons = [None] * 11
+        for i in range(1, 10):
+            self.buttons[i] = Button(self.pinput, text=str(i), command=(lambda num=i: self.digit(num)))
+            self.buttons[i].grid(row=1+(i-1) // 3, column=(i-1) % 3)
+        self.buttons[0] = Button(self.pinput, text="0", command=(lambda: self.digit(0)))
+        self.buttons[0].grid(row=4, column=1)
+        corr = Button(self.pinput, text="C", command=self.correct, bg="yellow")
+        corr.grid(row=4, column=0)
+        self.pinput.wait_window()
+
+    def digit(self, d):
+        self.pinvar.set(self.pinvar.get() + str(d))
+        self.display["text"] = "*"*len(self.pinvar.get())
+        if len(self.pinvar.get()) == 4:
+            self.pincode = self.pinvar.get()
+            self.pinput.destroy()
+
+    def correct(self):
+        self.pinvar.set("")
+        self.display["text"] = ""
+
+    def pin(self):
+        return self.pincode
 
 
 menu_string = """
@@ -25,6 +62,23 @@ Hier is uw keuzemenu:
 6: Rekening opzeggen
 0: Stoppen
 """  # String
+
+
+def vertel(*strings, sep=" ", end="\n"):
+    if INTERFACE == "gui":
+        showinfo("PyBank", sep.join([str(s) for s in strings])+end)
+    else:
+        print(*strings, sep=sep, end=end)
+
+
+def vraag_pin(rekeningnr):
+    if INTERFACE == "gui":
+        pd = PinDialog(rekeningnr)
+        pin = pd.pin()
+    else:
+        print("Rekening", rekeningnr, end=". ")
+        pin = input("Geef je PIN-code: ")
+    return pin
 
 
 def get_rekeningen():  # IO [Rekening]
@@ -116,10 +170,9 @@ def nieuwe_rekening(rekeningnr=0, naam="Anonymous", rektype="betaal", roodlimiet
         huidig.append({'rekening': rekeningnr, 'pin_code': pin, 'naam': naam, 'type': rektype,
                        'roodlimiet': roodlimiet, 'saldo': 0})
         schrijf_csv(huidig)
-        print("Je hebt rekening", rekeningnr, "gekregen!")
-        print("Je PIN-code is:", pin)
+        vertel("Je hebt rekening", rekeningnr, "gekregen!\nJe PIN-code is:", pin)
     else:
-        print("Rekening bezet, ik kies een andere rekening!")
+        vertel("Rekening bezet, ik kies een andere rekening!")
         nieuwe_rekening(naam=naam, rektype=rektype, roodlimiet=roodlimiet)
 
 
@@ -135,13 +188,12 @@ def geld_opnemen(rekeningnr, bedrag, pin=None):  # RekeningNr, Bedrag -> IO Bool
     """
     logging.debug("[GELD OPNEMEN]")
     if not pin:
-        print("Rekening", rekeningnr, end=". ")
-        pin = input("Geef je PIN-code: ")
+        pin = vraag_pin(rekeningnr)
     bron = get_rekening(rekeningnr)
     if pin == bron["pin_code"]:
         if int(bron["saldo"]) - bedrag >= int(bron["roodlimiet"]):
             bron["saldo"] = str(int(bron["saldo"]) - bedrag)
-            print("Je hebt €", bedrag, "van rekening", formatteer_iban(rekeningnr), "afgeschreven.")
+            vertel("Je hebt €", bedrag, "van rekening", formatteer_iban(rekeningnr), "afgeschreven.")
             nieuwe_status = list(k for k in get_rekeningen() if not k["rekening"] == str(rekeningnr))
             # Dit is een python-generator of lijst-comprehensie. Hoef je niet te kunnen volgen.
             # Geeft basically alle elementen terug waarvoor de if onwaar is, oftewel alles behalve de rekening met
@@ -150,10 +202,10 @@ def geld_opnemen(rekeningnr, bedrag, pin=None):  # RekeningNr, Bedrag -> IO Bool
             schrijf_csv(nieuwe_status)
             return True
         else:
-            print("Onvoldoende saldo!")
+            vertel("Onvoldoende saldo!")
             return False
     else:
-        print("Dat is niet goed!")
+        vertel("Dat is niet goed!")
         return False
 
 
@@ -167,7 +219,7 @@ def geld_storten(rekeningnr, bedrag):  # RekeningNr, Bedrag -> IO Bool
     logging.debug("[GELD STORTEN]")
     doel = get_rekening(rekeningnr)
     doel["saldo"] = str(int(doel["saldo"]) + bedrag)
-    print("Je hebt €", bedrag, "op rekening", formatteer_iban(rekeningnr), "gestort.")
+    vertel("Je hebt €", bedrag, "op rekening", formatteer_iban(rekeningnr), "gestort.")
     nieuwe_status = list(k for k in get_rekeningen() if not k["rekening"] == str(rekeningnr))
     # Dit is een python-generator of lijst-comprehensie. Hoef je niet te kunnen volgen.
     # Geeft basically alle elementen terug waarvoor de if onwaar is, oftewel alles behalve de rekening met
@@ -207,18 +259,18 @@ def rekening_verwijderen(rekeningnr):  # RekeningNr -> IO Bool
     """
     logging.debug("[REKENING VERWIJDEREN]")
     rek = get_rekening(rekeningnr)
-    pin = input("Geef je PIN-code om de rekening op te kunnen zeggen? ")
+    pin = vraag_pin(rekeningnr)
     if pin == rek["pin_code"]:
         if int(rek["saldo"]) < 0:
-            print("Je kunt je rekening niet sluiten zo lang je rood staat.")
+            vertel("Je kunt je rekening niet sluiten zo lang je rood staat.")
             return False
         elif int(rek["saldo"]) > 0:
             doel = input_rekeningnr("Op de rekening staat nog tegoed. Naar welke rekening wil je dit overschrijven? ")
             if not geld_overboeken(rekeningnr, doel, int(rek["saldo"]), pin):
-                print("Er ging iets fout met overschrijven, probeer het later nog eens. Excuses voor het ongemak.")
+                vertel("Er ging iets fout met overschrijven, probeer het later nog eens. Excuses voor het ongemak.")
                 return False
 
-        print("Je hebt de rekening", rekeningnr, "opgezegd.")
+        vertel("Je hebt de rekening", rekeningnr, "opgezegd.")
         nieuwe_status = list(k for k in get_rekeningen() if not k["rekening"] == str(rekeningnr))
         # Dit is een python-generator of lijst-comprehensie. Hoef je niet te kunnen volgen.
         # Geeft basically alle elementen terug waarvoor de if onwaar is, oftewel alles behalve de rekening met
@@ -226,7 +278,7 @@ def rekening_verwijderen(rekeningnr):  # RekeningNr -> IO Bool
         schrijf_csv(nieuwe_status)
         return True
     else:
-        print("De juiste pincode is benodigd om de rekening op te kunnen zeggen.")
+        vertel("De juiste pincode is benodigd om de rekening op te kunnen zeggen.")
         return False
 
 
@@ -237,7 +289,11 @@ def input_integer(prompt):  # String -> Int
     :param prompt: Het prompt.
     :return: De invoer als integer.
     """
-    invoer = input(prompt)
+    if INTERFACE == "gui":
+        invoer = askinteger("PyBank", prompt)
+    else:
+        invoer = input(prompt)
+
     if invoer and invoer.isdigit():
         return int(invoer)
     else:
@@ -252,7 +308,11 @@ def input_rekeningnr(prompt):  # String -> RekeningNr
     :param prompt: Het prompt.
     :return: De invoer als integer.
     """
-    invoer = input_integer(prompt)
+    if INTERFACE == "gui":
+        invoer = askinteger("PyBank", prompt)
+    else:
+        invoer = input_integer(prompt)
+
     if invoer in get_rekeningnummers():
         return invoer
     else:
@@ -327,7 +387,7 @@ def menu_maak_nieuwe_rekening():  # IO ()
 
 def menu_neem_geld_op():  # IO ()
     """
-    Menu-item drie. Vraagt de nodige invoer om geld_opnemen() aan te kunnen roepen.
+    Menu-item twee. Vraagt de nodige invoer om geld_opnemen() aan te kunnen roepen.
     :return: ()
     """
     nummer = input_rekeningnr("Wat is het rekeningnummer? ")
@@ -337,7 +397,7 @@ def menu_neem_geld_op():  # IO ()
 
 def menu_stort_geld():  # IO ()
     """
-    Menu-item vier. Vraagt de nodige invoer om geld_storten() aan te kunnen roepen.
+    Menu-item twee. Vraagt de nodige invoer om geld_storten() aan te kunnen roepen.
     :return: ()
     """
     nummer = input_rekeningnr("Wat is het rekeningnummer? ")
@@ -347,7 +407,7 @@ def menu_stort_geld():  # IO ()
 
 def menu_boek_geld_over():  # IO ()
     """
-    Menu-item vijf. Vraagt de nodige invoer om geld_overboeken() aan te kunnen roepen.
+    Menu-item twee. Vraagt de nodige invoer om geld_overboeken() aan te kunnen roepen.
     :return: ()
     """
     bron = input_rekeningnr("Van welk rekeningnummer wil je geld overschrijven? ")
@@ -358,7 +418,7 @@ def menu_boek_geld_over():  # IO ()
 
 def menu_rekening_opzeggen():  # IO ()
     """
-    Menu-item zes. Vraagt de nodige invoer om rekening_verwijderen() aan te kunnen roepen.
+    Menu-item twee. Vraagt de nodige invoer om rekening_verwijderen() aan te kunnen roepen.
     :return: ()
     """
     rekeningnr = input_rekeningnr("Welk rekeningnummer wil je opzeggen? ")
@@ -416,5 +476,249 @@ def menu_korter(repeat=True):  # Bool -> IO ()
         menu_korter()
 
 
+def gui_toon_rekeningen():  # IO ()
+    rekeningen_window = Tk()
+    rekeningen_window.title("Rekeningen")
+    labels = []
+    header = [None]*5
+    header[0] = Label(rekeningen_window, text="Naam", font="-weight bold")
+    header[0].grid(row=0, column=0, sticky=W)
+    header[1] = Label(rekeningen_window, text="IBAN", font="-weight bold")
+    header[1].grid(row=0, column=1, sticky=W)
+    header[2] = Label(rekeningen_window, text="  Saldo", font="-weight bold")
+    header[2].grid(row=0, column=2, sticky=W)
+    header[3] = Label(rekeningen_window, text="  Limiet", font="-weight bold")
+    header[3].grid(row=0, column=3, sticky=W)
+    header[4] = Label(rekeningen_window, text="Type", font="-weight bold")
+    header[4].grid(row=0, column=4)
+    for i, rekening in enumerate(get_rekeningen()):
+        row = [None]*5
+        row[0] = Label(rekeningen_window, text=rekening["naam"])
+        row[0].grid(row=i+1, column=0, sticky=W)
+        row[1] = Label(rekeningen_window, text=formatteer_iban(rekening["rekening"]))
+        row[1].grid(row=i+1, column=1, sticky=W)
+        row[2] = Label(rekeningen_window, text="€ " + rekening["saldo"])
+        row[2].grid(row=i+1, column=2, sticky=E)
+        row[3] = Label(rekeningen_window, text="€ " + rekening["roodlimiet"])  # , fg="red")
+        row[3].grid(row=i+1, column=3, sticky=E)
+        row[4] = Label(rekeningen_window, text=rekening["type"]+"rekening")
+        row[4].grid(row=i+1, column=4, sticky=W)
+        labels.append(row)
+
+    rekeningen_window.wait_window()
+
+
+def gui_maak_nieuwe_rekening():  # IO ()
+    nieuw_window = Tk()
+    nieuw_window.title("Nieuwe rekening aanmaken")
+
+    numlab = Label(nieuw_window, text="Gewenst rekeningnummer")
+    numlab.pack()
+    num = Entry(nieuw_window)
+    num.pack()
+
+    naamlab = Label(nieuw_window, text="Naam")
+    naamlab.pack()
+    naam = Entry(nieuw_window)
+    naam.pack()
+
+    typelab = Label(nieuw_window, text="Type rekening")
+    typelab.pack()
+    typevar = StringVar(nieuw_window)
+    typevar.set("betaal")
+    typemenu = OptionMenu(nieuw_window, typevar, "betaal", "spaar")
+    typemenu.pack()
+
+    roodlab = Label(nieuw_window, text="Roodlimiet")
+    roodlab.pack()
+    rood = Entry(nieuw_window)
+    rood.pack()
+
+    def test_input():
+        if num.get().isdigit() and naam.get() != "" and rood.get().isdigit():
+            nieuwe_rekening(int(num.get()), naam.get(), typevar.get(), 0 - rood.get())
+            nieuw_window.destroy()
+        else:
+            if not num.get().isdigit():
+                numlab["fg"] = "red"
+            if naam.get() == "":
+                naamlab["fg"] = "red"
+            if not rood.get().isdigit():
+                roodlab["fg"] = "red"
+
+    knop = Button(nieuw_window, text='Maak rekening', command=test_input)
+    knop.pack()
+
+    nieuw_window.wait_window()
+
+
+def gui_neem_geld_op():  # IO ()
+    opname_window = Tk()
+    opname_window.title("Geld opnemen")
+
+    numlab = Label(opname_window, text="Rekeningnummer")
+    numlab.pack()
+    num = Entry(opname_window)
+    num.pack()
+
+    bedraglab = Label(opname_window, text="Bedrag")
+    bedraglab.pack()
+    bedrag = Entry(opname_window)
+    bedrag.pack()
+
+    def test_input():
+        if num.get().isdigit() and bedrag.get().isdigit() and int(num.get()) in get_rekeningnummers():
+            geld_opnemen(int(num.get()), int(bedrag.get()))
+            opname_window.destroy()
+        else:
+            if not num.get().isdigit():
+                numlab["fg"] = "red"
+            if not bedrag.get().isdigit():
+                bedrag["fg"] = "red"
+            if not int(num.get()) in get_rekeningnummers():
+                vertel("Dit rekeningnummer bestaat niet!")
+                numlab["fg"] = "red"
+
+    knop = Button(opname_window, text='Neem op', command=test_input)
+    knop.pack()
+
+    opname_window.wait_window()
+
+
+def gui_stort_geld():  # IO ()
+    storting_window = Tk()
+    storting_window.title("Geld storten")
+
+    numlab = Label(storting_window, text="Rekeningnummer")
+    numlab.pack()
+    num = Entry(storting_window)
+    num.pack()
+
+    bedraglab = Label(storting_window, text="Bedrag")
+    bedraglab.pack()
+    bedrag = Entry(storting_window)
+    bedrag.pack()
+
+    def test_input():
+        if num.get().isdigit() and bedrag.get().isdigit() and int(num.get()) in get_rekeningnummers():
+            geld_storten(int(num.get()), int(bedrag.get()))
+            storting_window.destroy()
+        else:
+            if not num.get().isdigit():
+                numlab["fg"] = "red"
+            if not bedrag.get().isdigit():
+                bedrag["fg"] = "red"
+            if not int(num.get()) in get_rekeningnummers():
+                vertel("Dit rekeningnummer bestaat niet!")
+                numlab["fg"] = "red"
+
+    knop = Button(storting_window, text='Stort', command=test_input)
+    knop.pack()
+
+    storting_window.wait_window()
+
+
+def gui_boek_geld_over(pin=None, bronrek=None, bedr=None):  # IO ()
+    overboeking_window = Tk()
+    overboeking_window.title("Geld overboeken")
+
+    bronlab = Label(overboeking_window, text="Bronrekening")
+    bronlab.pack()
+    bron = Entry(overboeking_window)
+    if bronrek:
+        bron.insert(0, bronrek["rekening"])
+    bron.pack()
+
+    doellab = Label(overboeking_window, text="Doelrekening")
+    doellab.pack()
+    doel = Entry(overboeking_window)
+    doel.pack()
+
+    bedraglab = Label(overboeking_window, text="Bedrag")
+    bedraglab.pack()
+    bedrag = Entry(overboeking_window)
+    if bedr:
+        bedrag.insert(0, bedr)
+    bedrag.pack()
+
+    def test_input():
+        if bron.get().isdigit() and doel.get().isdigit() and bedrag.get().isdigit() \
+                and int(bron.get()) in get_rekeningnummers() and int(doel.get()) in get_rekeningnummers():
+            geld_overboeken(bron.get(), doel.get(), int(bedrag.get()), pin=pin)
+            overboeking_window.destroy()
+        else:
+            if not bron.get().isdigit() or not int(bron.get()) in get_rekeningnummers():
+                bronlab["fg"] = "red"
+            if not doel.get().isdigit() or not int(doel.get()) in get_rekeningnummers():
+                doellab["fg"] = "red"
+            if not bedrag.get().isdigit():
+                bedrag["fg"] = "red"
+            if not int(bron.get()) in get_rekeningnummers() or not int(doel.get()) in get_rekeningnummers():
+                vertel("Dit rekeningnummer bestaat niet!")
+
+    knop = Button(overboeking_window, text='Boek over', command=test_input)
+    knop.pack()
+
+    overboeking_window.wait_window()
+
+
+def gui_rekening_opzeggen():  # IO ()
+    opzeg_window = Tk()
+    opzeg_window.title("Rekening opzeggen")
+
+    numlab = Label(opzeg_window, text="Rekeningnummer")
+    numlab.pack()
+    num = Entry(opzeg_window)
+    num.pack()
+
+    def test_input():
+        if num.get().isdigit() and int(num.get()) in get_rekeningnummers():
+            rekening_verwijderen(int(num.get()))
+            opzeg_window.destroy()
+        else:
+            if not num.get().isdigit():
+                numlab["fg"] = "red"
+            if not int(num.get()) in get_rekeningnummers():
+                vertel("Dit rekeningnummer bestaat niet!")
+                numlab["fg"] = "red"
+
+    knop = Button(opzeg_window, text='Zeg op', command=test_input)
+    knop.pack()
+
+    opzeg_window.wait_window()
+
+
+def menu_gui():
+    window = Tk()
+    window.title("Welkom bij PyBank!")
+
+    label = Label(window, text='Uw keuze:')
+    label.pack(fill=X, expand=True)
+
+    guimenu = [("Rekeningen-overzicht",   gui_toon_rekeningen),
+               ("Rekening openen",        gui_maak_nieuwe_rekening),
+               ("Geld opnemen",           gui_neem_geld_op),
+               ("Geld storten",           gui_stort_geld),
+               ("Geld overschrijven",     gui_boek_geld_over),
+               ("Rekening opzeggen",      gui_rekening_opzeggen),
+               ("Stoppen",                exit)]
+
+    buttons = [None] * 7
+
+    for i in range(len(guimenu)):
+        buttons[i] = Button(window, text=guimenu[i][0], command=guimenu[i][1])
+        buttons[i].pack(fill=X, expand=True)
+
+    window.mainloop()
+
+
+def main():
+    if INTERFACE == "gui":
+        menu_gui()  # Roep de GUI aan.
+    else:
+        menu_korter(True)  # Roep een herhalend menu aan.
+
+
 open('rekeningen.csv', 'a').close()  # Dit garandeert dat het bestand bestaat.
-menu_korter(True)  # Roep een herhalend menu aan.
+
+main()
