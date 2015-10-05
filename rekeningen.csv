@@ -1,0 +1,11 @@
+rekening,naam,pin_code,saldo,roodlimiet,type
+1845,Mevr. Maurer-Wirtz,4711,150,-100,betaal
+9000,Arthur C. Clark,2001,0,0,betaal
+12,Jeffrey Goines,4635,0,0,betaal
+9001,Anonymous,1789,0,0,betaal
+2,Dhr. Jansen,0615,400,0,spaar
+1,Dhr. Jansen,1234,200,-250,betaal
+4,Poor Man Hessing,0000,-50,-5000,betaal
+10,David Tennant,7843,250,0,betaal
+11,Matt Smith,0273,100,0,betaal
+13,Brian van der Bijl,9782,400,0,spaar
